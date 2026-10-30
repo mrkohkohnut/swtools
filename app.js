@@ -7,7 +7,7 @@ const store = {
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* quota or private mode */ } },
 };
 
-const state = { units: [], runes: [], byId: {}, bestiary: store.get('bestiary') || {} };
+const state = { units: [], runes: [], byId: {}, bestiary: store.get('bestiary') || {}, skills: store.get('skills') || {} };
 
 // ---------- tabs ----------
 $('#nav').onclick = (e) => {
@@ -50,22 +50,30 @@ const monCell = (u) => {
   return `<span class="mon">${b?.img ? `<img src="https://swarfarm.com/static/herders/images/monsters/${b.img}" alt="" loading="lazy">` : ''}${esc(monName(u))}</span>`;
 };
 
-// SWARFARM bestiary for names/icons; cached. Optional: app works with #ids if this fails.
-async function loadBestiary() {
-  if (Object.keys(state.bestiary).length) return;
-  let url = 'https://swarfarm.com/api/v2/monsters/?page_size=1000';
+// SWARFARM bestiary (names/icons) and skills (max levels); cached. Optional: app works with #ids if this fails.
+async function fetchAll(url, add) {
   const out = {};
+  while (url) {
+    const j = await (await fetch(url)).json();
+    for (const x of j.results) add(out, x);
+    url = j.next;
+  }
+  return out;
+}
+async function loadBestiary() {
   try {
-    while (url) {
-      const j = await (await fetch(url)).json();
-      for (const m of j.results) out[m.com2us_id] = { name: m.name, img: m.image_filename };
-      url = j.next;
+    if (!Object.keys(state.bestiary).length) {
+      state.bestiary = await fetchAll('https://swarfarm.com/api/v2/monsters/?page_size=1000', (o, m) => (o[m.com2us_id] = { name: m.name, img: m.image_filename }));
+      store.set('bestiary', state.bestiary);
+      renderAll();
     }
-    state.bestiary = out;
-    store.set('bestiary', out);
-    renderAll();
+    if (!Object.keys(state.skills).length) {
+      state.skills = await fetchAll('https://swarfarm.com/api/v2/skills/?page_size=1000', (o, s) => (o[s.com2us_id] = s.max_level));
+      store.set('skills', state.skills);
+      renderMonsters();
+    }
   } catch (e) {
-    console.warn('Bestiary unavailable', e);
+    console.warn('SWARFARM data unavailable', e);
   }
 }
 
@@ -79,6 +87,12 @@ function load(data) {
   state.units = units.sort((a, b) => b.class - a.class || b.unit_level - a.unit_level);
   state.runes = runes;
   state.byId = Object.fromEntries(units.map((u) => [u.unit_id, u]));
+  const eq = {};
+  for (const r of runes) if (r.occupied_id) (eq[r.occupied_id] ??= []).push(r);
+  for (const u of units) {
+    u._st = SW.unitStats(u, eq[u.unit_id] || []);
+    u._eff = eq[u.unit_id] ? eq[u.unit_id].reduce((s, r) => s + r.eff, 0) / eq[u.unit_id].length : 0;
+  }
   state.wizard = data.wizard_info?.wizard_name;
   state.rta = data.rtpvp_info;
   renderAll();
@@ -311,6 +325,175 @@ function analyzeRta() {
 }
 const wr2 = (r) => r.wins / r.games + r.games / 1e6; // tie-break by games
 
+// ---------- monsters tab ----------
+const ELEMENTS = { 1: 'Water', 2: 'Fire', 3: 'Wind', 4: 'Light', 5: 'Dark' };
+$('#mEl').innerHTML = options(ELEMENTS, 'All');
+['#mQ', '#mEl', '#mStar', '#mSk'].forEach((s) => ($(s).oninput = renderMonsters));
+
+// missing = skill-ups still needed; null when SWARFARM max levels are unknown
+function skillInfo(u) {
+  const sk = (u.skills || []).map(([id, lv]) => ({ lv, max: state.skills[id] }));
+  const known = sk.length && sk.every((s) => s.max);
+  return {
+    txt: sk.map((s) => (s.max ? `${s.lv}/${s.max}` : s.lv)).join(' · '),
+    used: sk.reduce((n, s) => n + s.lv - 1, 0),
+    missing: known ? sk.reduce((n, s) => n + Math.max(0, s.max - s.lv), 0) : null,
+  };
+}
+
+function renderMonsters() {
+  const us = state.units;
+  if (!us.length) return ($('#mStats').innerHTML = '<div class="empty">Import an account first.</div>');
+  const copies = {};
+  for (const u of us) copies[u.unit_master_id] = (copies[u.unit_master_id] || 0) + 1;
+  for (const u of us) u._sk = skillInfo(u);
+  const known = us.some((u) => u._sk.missing !== null);
+  const card = (n, v, sub = '') => `<div class="stat"><span>${n}</span><b>${v}</b>${sub ? `<span>${sub}</span>` : ''}</div>`;
+  $('#mStats').innerHTML = `<h2>Collection</h2><div class="stats">
+    ${card('Monsters', us.length, `${Object.keys(copies).length} unique`)}
+    ${card('6★', us.filter((u) => u.class % 10 === 6).length, `${us.filter((u) => u.class % 10 === 6 && u.unit_level === 40).length} at L40`)}
+    ${known ? card('Fully skilled', us.filter((u) => u._sk.missing === 0).length) + card('Skill-ups needed', us.reduce((n, u) => n + (u._sk.missing || 0), 0), 'across all monsters') : card('Skill-ups used', us.reduce((n, u) => n + u._sk.used, 0), 'max levels load from SWARFARM')}
+    ${Object.entries(ELEMENTS).map(([id, n]) => card(n, us.filter((u) => u.attribute === +id).length)).join('')}
+  </div>`;
+  const q = $('#mQ').value.toLowerCase(), el = +$('#mEl').value, star = $('#mStar').value, sk = $('#mSk').value;
+  const rows = us.filter((u) => (!q || monName(u).toLowerCase().includes(q)) && (!el || u.attribute === el)
+    && (!star || (star === '6' ? u.class % 10 === 6 : u.class % 10 < 6))
+    && (!sk || (sk === 'need' ? u._sk.missing > 0 : u._sk.missing === 0)));
+  table($('#mTable'), [
+    { k: 'name', label: 'Monster', v: monName, f: monCell },
+    { k: 'attribute', label: 'Element', f: (u) => ELEMENTS[u.attribute] || '' },
+    { k: 'class', label: '★', f: (u) => u.class % 10 },
+    { k: 'unit_level', label: 'Lvl' },
+    { k: 'skills', label: 'Skills', v: (u) => u._sk.used, f: (u) => esc(u._sk.txt) },
+    { k: 'missing', label: 'Skill-ups left', v: (u) => u._sk.missing ?? -1, f: (u) => (u._sk.missing === null ? '<span class="muted">?</span>' : u._sk.missing ? `<span class="bad">${u._sk.missing}</span>` : '<span class="good">Max</span>') },
+    { k: 'copies', label: 'Copies', v: (u) => copies[u.unit_master_id], f: (u) => copies[u.unit_master_id] },
+    { k: 'spd', label: 'SPD', v: (u) => u._st.SPD, f: (u) => u._st.SPD },
+    { k: 'hp', label: 'HP', v: (u) => u._st.HP, f: (u) => u._st.HP },
+    { k: 'sets', label: 'Sets', v: (u) => u._st.sets.length, f: (u) => setChips(u._st.sets) },
+    { k: 'eff', label: 'Rune eff', v: (u) => u._eff, f: (u) => (u._eff ? u._eff.toFixed(0) + '%' : '–') },
+  ], rows, 'class');
+}
+
+// ---------- siege planner ----------
+// plan.teams: [{ name, vs, enemySpd, lead, units: [unit_id x3] }]
+// plan.builds[unit_id]: { sets: [id, id], max, minSpd, outspeed, runes: [rune_id] | null, err }
+// One build per monster, shared by every team it's in, so a rune is never assigned twice.
+const plan = store.get('siegePlan') || { teams: [], builds: {} };
+const savePlan = () => store.set('siegePlan', plan);
+const unitLabel = (u) => `${monName(u)} ${u.class % 10}★ L${u.unit_level} #${u.unit_id}`;
+const buildOf = (id) => (plan.builds[id] ??= { sets: ['', ''], max: 'SPD', minSpd: '', outspeed: true, runes: null });
+const runeById = () => Object.fromEntries(state.runes.map((r) => [r.rune_id, r]));
+
+$('#pAdd').onclick = () => {
+  plan.teams.push({ name: $('#pName').value || `Team ${plan.teams.length + 1}`, vs: $('#pVs').value, enemySpd: '', lead: '', units: ['', '', ''] });
+  $('#pName').value = $('#pVs').value = '';
+  savePlan();
+  renderPlan();
+};
+
+function slotTarget(t, u) {
+  const b = buildOf(u.unit_id);
+  let min = +b.minSpd || 0;
+  if (b.outspeed && +t.enemySpd) min = Math.max(min, SW.minSpeedStat(u.spd, +t.lead || 0, +t.enemySpd));
+  return min;
+}
+
+function renderPlan() {
+  $('#unitList').innerHTML = state.units.map((u) => `<option value="${esc(unitLabel(u))}">`).join('');
+  const rb = runeById();
+  if (!plan.teams.length) return ($('#pTeams').innerHTML = '<div class="card empty">No teams yet. Add one above.</div>');
+  $('#pTeams').innerHTML = plan.teams.map((t, ti) => {
+    let moves = 0;
+    const slots = t.units.map((id, si) => {
+      const u = state.byId[id];
+      const b = u && buildOf(id);
+      const sel = (f, i, opts) => `<select data-t="${ti}" data-s="${si}" data-f="${f}" data-i="${i ?? ''}" ${u ? '' : 'disabled'}>${opts}</select>`;
+      const setOpts = (v) => options(SW.SETS, '—').replace(`value="${v}"`, `value="${v}" selected`);
+      let out = '';
+      if (b?.err) out = `<p class="bad">${esc(b.err)}</p>`;
+      else if (b?.runes) {
+        const rs = b.runes.map((rid) => rb[rid]).filter(Boolean);
+        const st = SW.unitStats(u, rs);
+        const combatSpd = st.SPD + SW.leadBonus(u.spd, +t.lead || 0);
+        const mv = rs.filter((r) => r.occupied_id !== u.unit_id);
+        moves += mv.length;
+        out = `<div style="grid-column:1/-1">
+          <div class="row" style="gap:16px;margin:4px 0">${setChips(st.sets)}
+            ${SW.STAT_KEYS.map((k) => { const d = st[k] - u._st[k]; return `<span><span class="muted">${k}</span> <b>${st[k]}</b>${d ? ` <span class="${d > 0 ? 'good' : 'bad'}">${d > 0 ? '+' : ''}${d}</span>` : ''}</span>`; }).join('')}
+            ${+t.enemySpd ? `<span class="${combatSpd > +t.enemySpd ? 'good' : 'bad'}">${combatSpd} combat spd ${combatSpd > +t.enemySpd ? '✓ outspeeds' : '✗ slower'}</span>` : ''}</div>
+          ${mv.length ? mv.map((r) => `<div class="move">Slot ${r.slot_no}: <b>${esc(SW.SETS[r.set_id])}</b> ${esc(SW.fmtStat(...r.pri_eff))} <span class="muted">(${r.eff.toFixed(0)}%)</span> ← ${owner(r)}</div>`).join('') : '<div class="move good">Already wearing these runes.</div>'}
+        </div>`;
+      }
+      return `<div class="slot">
+        <label>Monster ${si + 1} <input list="unitList" data-t="${ti}" data-s="${si}" data-f="unit" value="${u ? esc(unitLabel(u)) : ''}" placeholder="Type to search"></label>
+        <label>Set 1 ${sel('sets', 0, setOpts(b?.sets[0]))}</label>
+        <label>Set 2 ${sel('sets', 1, setOpts(b?.sets[1]))}</label>
+        <label>Maximize ${sel('max', null, options(STAT_OPTS).replace(`value="${b?.max}"`, `value="${b?.max}" selected`))}</label>
+        <label>Min SPD <input type="number" data-t="${ti}" data-s="${si}" data-f="minSpd" value="${b?.minSpd ?? ''}" placeholder="${u ? slotTarget(t, u) || 'none' : ''}" ${u ? '' : 'disabled'}></label>
+        <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" data-t="${ti}" data-s="${si}" data-f="outspeed" ${b?.outspeed ? 'checked' : ''} ${u ? '' : 'disabled'}> Outspeed</label>
+        ${out}
+      </div>`;
+    }).join('');
+    return `<div class="card">
+      <div class="row">
+        <div style="flex:1"><h2 style="margin:0">${esc(t.name)}</h2><span class="muted">vs ${esc(t.vs || '—')}</span></div>
+        <label>Enemy fastest combat spd <input type="number" data-t="${ti}" data-f="enemySpd" value="${t.enemySpd}" style="width:110px"></label>
+        <label>Your lead SPD % <input type="number" data-t="${ti}" data-f="lead" value="${t.lead}" list="leads" style="width:90px"></label>
+        <button class="btn" data-opt="${ti}">Optimize runes</button>
+        <button class="btn ghost" data-del="${ti}">Delete</button>
+      </div>
+      ${moves ? `<p><b>${moves}</b> rune${moves > 1 ? 's' : ''} to move for this team.</p>` : ''}
+      ${slots}
+      <p class="muted" data-status="${ti}"></p>
+    </div>`;
+  }).join('');
+}
+
+$('#pTeams').onchange = (e) => {
+  const { t, s, f, i } = e.target.dataset;
+  if (t === undefined) return;
+  const team = plan.teams[t];
+  const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+  if (s === undefined) team[f] = v;
+  else if (f === 'unit') team.units[s] = (v.match(/#(\d+)$/) || [])[1] || '';
+  else {
+    const b = buildOf(team.units[s]);
+    if (f === 'sets') b.sets[i] = v;
+    else b[f] = v;
+  }
+  savePlan();
+  setTimeout(renderPlan); // re-rendering inside change blurs the input and re-fires change
+};
+
+$('#pTeams').onclick = async (e) => {
+  const del = e.target.dataset.del, opt = e.target.dataset.opt;
+  if (del !== undefined && confirm(`Delete team "${plan.teams[del].name}"?`)) {
+    plan.teams.splice(del, 1);
+    savePlan();
+    return renderPlan();
+  }
+  if (opt === undefined) return;
+  const t = plan.teams[opt];
+  const status = $(`[data-status="${opt}"]`);
+  const inPlan = new Set(plan.teams.flatMap((x) => x.units).filter(Boolean).map(String));
+  for (const id of t.units) {
+    const u = state.byId[id];
+    if (!u) continue;
+    status.textContent = `Optimizing ${monName(u)}…`;
+    await new Promise((r) => setTimeout(r));
+    // runes already assigned to other planned monsters are off limits
+    const taken = new Set();
+    for (const other in plan.builds) if (other !== String(id) && inPlan.has(other)) (plan.builds[other].runes || []).forEach((r) => taken.add(r));
+    const b = buildOf(id);
+    const min = slotTarget(t, u) ? { SPD: slotTarget(t, u) } : {};
+    const res = SW.optimize(u, state.runes.filter((r) => !taken.has(r.rune_id)), { sets: b.sets.map(Number).filter(Boolean), maximize: b.max, min });
+    b.err = res.error || (res.results.length ? null : `No build reaches ${min.SPD || 0} SPD with these sets from free runes.`);
+    b.runes = res.results[0] ? res.results[0].runes.map((r) => r.rune_id) : null;
+  }
+  savePlan();
+  renderPlan();
+};
+
 // ---------- render ----------
 function renderAll() {
   const monOpts = state.units.map((u) => `<option value="${u.unit_id}">${esc(monName(u))} · ${u.class}★ L${u.unit_level}</option>`).join('');
@@ -320,6 +503,8 @@ function renderAll() {
   if (keep[0]) $('#bMon').value = keep[0];
   if (keep[1]) $('#sMon').value = keep[1];
   renderSummary();
+  renderMonsters();
+  renderPlan();
   renderRunes();
   renderCurrent();
   renderOutspeed();

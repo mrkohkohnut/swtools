@@ -151,6 +151,8 @@ const leadBonus = (base, lead) => Math.ceil((base * lead) / 100);
 const combatSpeed = (base, runeSpd, lead = 0) => base + runeSpd + leadBonus(base, lead);
 // Strictly faster always moves first; equal speed is a coin flip, so +1.
 const minRuneSpeed = (base, lead, enemyCombat) => Math.max(0, enemyCombat + 1 - base - leadBonus(base, lead));
+// Same target as an SPD stat (base + runes, no lead), for optimizer minimums.
+const minSpeedStat = (base, lead, enemyCombat) => base + minRuneSpeed(base, lead, enemyCombat);
 
 // Opening turn order. Each tick ATB += speed * 7%; >=100 takes a turn, highest ATB first.
 // units: [{ name, team, spd (combat speed), boost (ATB % given to allies after its turn) }]
@@ -237,6 +239,6 @@ function analyzeMatches(matches) {
 
 const SW = {
   STAT, SETS, STAT_KEYS, setSize, fmtStat, efficiency, unitStats, optimize,
-  leadBonus, combatSpeed, minRuneSpeed, turnOrder, minSpeedBefore, parseMatches, analyzeMatches,
+  leadBonus, combatSpeed, minRuneSpeed, minSpeedStat, turnOrder, minSpeedBefore, parseMatches, analyzeMatches,
 };
 if (typeof module !== 'undefined') module.exports = SW;

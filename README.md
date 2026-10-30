@@ -7,8 +7,10 @@ Open `index.html`, or host the folder anywhere (GitHub Pages works).
 | Tab | What it does |
 |---|---|
 | **Import** | Load a SWEX JSON export. Shows account summary (rune efficiency, speed subs). |
+| **Monsters** | Collection summary (count, unique, 6★/L40, per element) and every monster with skill levels, skill-ups left, copies, speed, sets and rune efficiency. |
 | **Runes** | Every rune with efficiency and max efficiency, filterable and sortable. |
 | **Builder** | Current stats for a monster, plus an optimizer: pick sets, slot 2/4/6 mains and minimum stats, then maximize one stat. |
+| **Siege Planner** | Saved teams vs siege defenses. Each monster gets a target build (sets, stat to maximize, min SPD or auto "outspeed the enemy"). Runes are assigned across all planned monsters with no rune used twice, and each team lists the runes to move. Saved in your browser. |
 | **Siege Speed** | Shows the minimum rune speed needed to outspeed an enemy defense (leads included). A speed tuner simulates opening turn order with ATB boosts and finds the minimum speed for one unit to move before another. |
 | **RTA** | Paste or load a match log (CSV/JSON) to get win rate, first-pick and second-pick win rate, per-monster pick/win/ban rates and the best pairs. |
 | **RTA Meta (draft)** | Tested statistics interface with collection paused pending a permitted data source. Designed for pick/ban/win-rate and surviving-pair statistics, with monster, element, sample-size and private-ownership filters. No live dataset is currently connected. |

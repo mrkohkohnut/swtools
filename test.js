@@ -29,6 +29,7 @@ assert.strictEqual(SW.optimize(unit, pool, { sets: [3, 15], min: { SPD: 999 } })
 // speed
 assert.strictEqual(SW.combatSpeed(101, 100, 24), 101 + 100 + 25);
 assert.strictEqual(SW.minRuneSpeed(101, 24, 250), 250 + 1 - 101 - 25);
+assert.strictEqual(SW.minSpeedStat(101, 24, 250) + SW.leadBonus(101, 24), 251);
 
 // turn order: faster first; ATB boost lets slower ally jump ahead of enemy
 const team = [

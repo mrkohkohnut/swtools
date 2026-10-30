@@ -57,6 +57,9 @@ details summary { cursor: pointer; color: var(--accent); }
 .order { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .order .chip { padding: 6px 12px; font-size: 13px; }
 .order .A { outline: 2px solid var(--good); } .order .B { outline: 2px solid var(--bad); }
+.slot { display: grid; gap: 8px; grid-template-columns: 2fr repeat(4, 1fr) auto; align-items: end; padding: 12px 0; border-top: 1px solid var(--line); }
+@media (max-width: 760px) { .slot { grid-template-columns: 1fr 1fr; } }
+.move { font-size: 13px; margin: 2px 0; }
 .empty { padding: 32px; text-align: center; color: var(--muted); }
 </style>
 </head>
@@ -65,8 +68,10 @@ details summary { cursor: pointer; color: var(--accent); }
   <div class="logo">⚔ SW Tools</div>
   <nav id="nav">
     <button data-tab="import" class="on">Import</button>
+    <button data-tab="monsters">Monsters</button>
     <button data-tab="runes">Runes</button>
     <button data-tab="builder">Builder</button>
+    <button data-tab="plan">Siege Planner</button>
     <button data-tab="siege">Siege Speed</button>
     <button data-tab="rta">RTA</button>
     <button data-tab="rtaMeta">RTA Meta</button>
@@ -83,6 +88,19 @@ details summary { cursor: pointer; color: var(--accent); }
     </label>
   </div>
   <div class="card" id="summary"><div class="empty">No account loaded yet.</div></div>
+</section>
+
+<section id="monsters">
+  <div class="card" id="mStats"></div>
+  <div class="card">
+    <div class="row">
+      <label style="flex:1">Search <input id="mQ" placeholder="Monster name"></label>
+      <label>Element <select id="mEl"></select></label>
+      <label>Stars <select id="mStar"><option value="">All</option><option value="6">6★</option><option value="5">5★ and below</option></select></label>
+      <label>Skills <select id="mSk"><option value="">All</option><option value="need">Needs skill-ups</option><option value="max">Fully skilled</option></select></label>
+    </div>
+  </div>
+  <div class="card tbl" id="mTable"></div>
 </section>
 
 <section id="runes">
@@ -126,6 +144,20 @@ details summary { cursor: pointer; color: var(--accent); }
     </div>
   </div>
   <div class="card tbl" id="bResults"></div>
+</section>
+
+<section id="plan">
+  <div class="card">
+    <h2>Siege planner</h2>
+    <p class="muted">Save the teams you use against each defense. Give each monster a target build and the optimizer assigns runes across <b>all</b> planned monsters so no rune is used twice, then lists what to move.</p>
+    <div class="row">
+      <label style="flex:1">Team name <input id="pName" placeholder="e.g. Chilling counter"></label>
+      <label style="flex:2">Enemy defense <input id="pVs" placeholder="e.g. Chilling, Leo, Riley"></label>
+      <button class="btn" id="pAdd">+ Add team</button>
+    </div>
+  </div>
+  <div id="pTeams"></div>
+  <datalist id="unitList"></datalist>
 </section>
 
 <section id="siege">
