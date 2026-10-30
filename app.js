@@ -323,14 +323,14 @@ function renderAll() {
   renderRunes();
   renderCurrent();
   renderOutspeed();
+  if (typeof renderRtaMeta === 'function') renderRtaMeta();
 }
 
 const saved = store.get('account');
 if (saved) load(saved);
 else {
   renderAll();
-  // bundled account (data/account.json) when served over http, e.g. GitHub Pages
-  fetch('data/account.json').then((r) => r.json()).then(load).catch(() => {});
+  // Accounts are imported locally; never fetch or publish a bundled export.
 }
 renderTune();
 if (store.get('rta')) $('#rText').value = store.get('rta');

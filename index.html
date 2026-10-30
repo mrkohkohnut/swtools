@@ -69,6 +69,7 @@ details summary { cursor: pointer; color: var(--accent); }
     <button data-tab="builder">Builder</button>
     <button data-tab="siege">Siege Speed</button>
     <button data-tab="rta">RTA</button>
+    <button data-tab="rtaMeta">RTA Meta</button>
   </nav>
 </div></header>
 
@@ -179,9 +180,37 @@ loss,Lushen|Tiana|Bastet|Bella|Ahman,Chilling|Leo|Riley|Psamathe|Fran,Fran,Lushe
   </div>
   <div id="rOut"></div>
 </section>
+<section id="rtaMeta">
+  <div class="card">
+    <h2>RTA Meta · public replay sample</h2>
+    <p class="muted">The statistics interface is ready, but collection is paused until a permitted data source is configured. No third-party dataset has been published. Your account import remains private.</p>
+    <div id="mStatus" role="status" aria-live="polite">Open this tab to load the latest cached snapshot.</div>
+    <div class="row" style="margin-top:16px">
+      <label style="flex:1">Monster, element or ID <input id="mSearch" type="search" placeholder="e.g. Vanessa or Wind"></label>
+      <label>Element <select id="mElement"><option value="">All elements</option><option>Fire</option><option>Water</option><option>Wind</option><option>Light</option><option>Dark</option></select></label>
+      <label>Minimum played games <input id="mMin" type="number" min="0" max="50000" value="5" style="width:100px"></label>
+      <label style="flex-direction:row;align-items:center"><input id="mOwned" type="checkbox"> My monsters only</label>
+      <button class="btn ghost" id="mRefresh">Reload snapshot</button>
+    </div>
+    <p class="muted" id="mOwnedNote">Ownership filtering uses only your locally imported account; nothing is uploaded.</p>
+  </div>
+  <div class="card" id="mStats"></div>
+  <div class="card">
+    <h2>Monster performance</h2>
+    <p class="muted">Pick rate = drafts / sampled matches. Ban rate = bans / drafts. Win rate = wins / post-ban appearances. Click column headings to sort; low samples are unreliable.</p>
+    <div class="tbl" id="mTable"><div class="empty">No public snapshot loaded.</div></div>
+  </div>
+  <div class="card">
+    <h2>Surviving teammate pairs</h2>
+    <p class="muted">Both monsters survived the ban on the same team. The minimum-games filter also applies here. Pair win rates are associations, not proof of synergy.</p>
+    <div class="tbl" id="mPairs"><div class="empty">No public snapshot loaded.</div></div>
+  </div>
+</section>
 </main>
 
 <script src="sw.js"></script>
+<script src="rta-meta.js"></script>
 <script src="app.js"></script>
+<script src="rta-meta-ui.js"></script>
 </body>
 </html>
