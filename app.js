@@ -80,6 +80,7 @@ function load(data) {
   state.runes = runes;
   state.byId = Object.fromEntries(units.map((u) => [u.unit_id, u]));
   state.wizard = data.wizard_info?.wizard_name;
+  state.rta = data.rtpvp_info;
   renderAll();
   loadBestiary();
 }
@@ -113,7 +114,10 @@ function renderSummary() {
     <div class="stat"><span>Runes ≥ 100% eff</span><b>${r.filter((x) => x.eff >= 100).length}</b></div>
     <div class="stat"><span>Speed subs ≥ 20</span><b>${speedSubs.filter((v) => v >= 20).length}</b></div>
     <div class="stat"><span>Speed subs ≥ 25</span><b>${speedSubs.filter((v) => v >= 25).length}</b></div>
-  </div>`;
+  </div>${state.rta ? `<h3>RTA this season</h3><div class="stats">
+    <div class="stat"><span>Score</span><b>${state.rta.rtpvp_score}</b><span>Rank ${state.rta.rank}</span></div>
+    <div class="stat"><span>Record</span><b>${state.rta.win_count}–${state.rta.lose_count}</b><span>${pct(state.rta.win_count, state.rta.win_count + state.rta.lose_count)} win rate</span></div>
+  </div>` : ''}`;
 }
 
 // ---------- runes ----------
@@ -323,6 +327,10 @@ function renderAll() {
 
 const saved = store.get('account');
 if (saved) load(saved);
-else renderAll();
+else {
+  renderAll();
+  // bundled account (data/account.json) when served over http, e.g. GitHub Pages
+  fetch('data/account.json').then((r) => r.json()).then(load).catch(() => {});
+}
 renderTune();
 if (store.get('rta')) $('#rText').value = store.get('rta');
