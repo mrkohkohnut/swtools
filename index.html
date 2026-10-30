@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SW Tools</title>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #fff; --fg: #1b1f24; --muted: #6b7280; --line: #e5e7eb;
+  --accent: #4f46e5; --accent-fg: #fff; --good: #059669; --bad: #dc2626; --chip: #eef0f4;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0f1115; --card: #171a21; --fg: #e6e8eb; --muted: #8b93a1; --line: #262b35;
+    --accent: #818cf8; --accent-fg: #0f1115; --good: #34d399; --bad: #f87171; --chip: #222733; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { position: sticky; top: 0; z-index: 2; background: var(--card); border-bottom: 1px solid var(--line); }
+.bar { max-width: 1200px; margin: auto; padding: 0 16px; display: flex; align-items: center; gap: 24px; overflow-x: auto; }
+.logo { font-weight: 700; white-space: nowrap; }
+nav { display: flex; gap: 4px; }
+nav button { background: none; border: 0; color: var(--muted); padding: 16px 12px; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+nav button.on { color: var(--fg); border-color: var(--accent); }
+main { max-width: 1200px; margin: auto; padding: 24px 16px; }
+section { display: none; } section.on { display: block; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+h2 { font-size: 16px; margin: 0 0 12px; } h3 { font-size: 14px; margin: 16px 0 8px; color: var(--muted); font-weight: 600; }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+.cols { display: grid; gap: 16px; grid-template-columns: 2fr 3fr; align-items: start; }
+.cols > * { min-width: 0; }
+@media (max-width: 960px) { .cols { grid-template-columns: 1fr; } }
+#tune td { padding: 6px 4px; } #tune input[type=number] { width: 64px; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+input, select, textarea { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+input[type=file] { max-width: 100%; } code { overflow-wrap: anywhere; }
+textarea { width: 100%; min-height: 120px; font-family: ui-monospace, monospace; font-size: 12px; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.btn { background: var(--accent); color: var(--accent-fg); border: 0; border-radius: 8px; padding: 8px 16px; font: inherit; font-weight: 600; cursor: pointer; }
+.btn.ghost { background: var(--chip); color: var(--fg); }
+.row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.muted { color: var(--muted); } .good { color: var(--good); } .bad { color: var(--bad); }
+.stats { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.stat { background: var(--chip); border-radius: 10px; padding: 12px 14px; }
+.stat b { display: block; font-size: 22px; } .stat span { font-size: 12px; color: var(--muted); }
+.tbl { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--card); }
+tbody tr:hover { background: var(--chip); }
+.chip { display: inline-block; background: var(--chip); border-radius: 999px; padding: 1px 8px; font-size: 12px; margin: 1px 2px 1px 0; }
+.big { font-size: 32px; font-weight: 700; }
+.mon { display: inline-flex; align-items: center; gap: 8px; }
+.mon img { width: 28px; height: 28px; border-radius: 6px; }
+.drop { border: 2px dashed var(--line); border-radius: 12px; padding: 32px; text-align: center; cursor: pointer; }
+.drop.over { border-color: var(--accent); }
+details summary { cursor: pointer; color: var(--accent); }
+.order { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.order .chip { padding: 6px 12px; font-size: 13px; }
+.order .A { outline: 2px solid var(--good); } .order .B { outline: 2px solid var(--bad); }
+.empty { padding: 32px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <div class="logo">⚔ SW Tools</div>
+  <nav id="nav">
+    <button data-tab="import" class="on">Import</button>
+    <button data-tab="runes">Runes</button>
+    <button data-tab="builder">Builder</button>
+    <button data-tab="siege">Siege Speed</button>
+    <button data-tab="rta">RTA</button>
+  </nav>
+</div></header>
+
+<main>
+<section id="import" class="on">
+  <div class="card">
+    <h2>Import your account</h2>
+    <p class="muted">Load the JSON file from <b>SWEX</b> (Summoners War Exporter). Everything stays in your browser.</p>
+    <label class="drop" id="drop">Drop SWEX .json here or click to choose
+      <input type="file" id="file" accept=".json" hidden>
+    </label>
+  </div>
+  <div class="card" id="summary"><div class="empty">No account loaded yet.</div></div>
+</section>
+
+<section id="runes">
+  <div class="card">
+    <div class="row">
+      <label>Set <select id="fSet"></select></label>
+      <label>Slot <select id="fSlot"><option value="">All</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+      <label>Main stat <select id="fMain"></select></label>
+      <label>Has sub <select id="fSub"></select></label>
+      <label>Min eff % <input id="fEff" type="number" value="0" style="width:90px"></label>
+      <label>Location <select id="fLoc"><option value="">All</option><option value="inv">Inventory</option><option value="eq">Equipped</option></select></label>
+    </div>
+  </div>
+  <div class="card" id="runeStats"></div>
+  <div class="card tbl" id="runeTable"></div>
+</section>
+
+<section id="builder">
+  <div class="card">
+    <div class="row"><label style="flex:1">Monster <select id="bMon"></select></label></div>
+    <div id="bCurrent"></div>
+  </div>
+  <div class="card">
+    <h2>Optimizer</h2>
+    <div class="grid">
+      <label>Set 1 <select class="bSet"></select></label>
+      <label>Set 2 <select class="bSet"></select></label>
+      <label>Set 3 <select class="bSet"></select></label>
+      <label>Slot 2 main <select class="bMain" data-slot="2"></select></label>
+      <label>Slot 4 main <select class="bMain" data-slot="4"></select></label>
+      <label>Slot 6 main <select class="bMain" data-slot="6"></select></label>
+      <label>Maximize <select id="bMax"></select></label>
+      <label>Candidates / slot <input id="bPer" type="number" value="6" min="2" max="30"></label>
+    </div>
+    <h3>Minimum stats</h3>
+    <div class="grid" id="bMins"></div>
+    <div class="row" style="margin-top:16px">
+      <label style="flex-direction:row;align-items:center"><input type="checkbox" id="bEquipped" checked> Use runes equipped on other monsters</label>
+      <span style="flex:1"></span>
+      <button class="btn" id="bRun">Find builds</button>
+    </div>
+  </div>
+  <div class="card tbl" id="bResults"></div>
+</section>
+
+<section id="siege">
+  <div class="cols">
+    <div class="card">
+      <h2>Minimum speed to outspeed</h2>
+      <p class="muted">How much rune speed you need to move before an enemy defense.</p>
+      <h3>Your monster</h3>
+      <div class="grid">
+        <label>Pick from account <select id="sMon"></select></label>
+        <label>Base speed <input id="sBase" type="number" value="101"></label>
+        <label>Your lead % <input id="sLead" type="number" value="24" list="leads"></label>
+      </div>
+      <h3>Enemy</h3>
+      <div class="grid">
+        <label>Base speed <input id="eBase" type="number" value="100"></label>
+        <label>Rune speed (+bonus) <input id="eRune" type="number" value="130"></label>
+        <label>Enemy lead % <input id="eLead" type="number" value="0" list="leads"></label>
+      </div>
+      <div class="stats" id="sOut" style="margin-top:16px"></div>
+      <datalist id="leads"><option>0</option><option>10</option><option>13</option><option>15</option><option>16</option><option>19</option><option>21</option><option>23</option><option>24</option><option>28</option><option>30</option><option>33</option></datalist>
+    </div>
+    <div class="card">
+      <h2>Speed tuner</h2>
+      <p class="muted">Opening turn order with ATB boosts. Team A = you, B = enemy.</p>
+      <div class="tbl"><table id="tune"><thead><tr><th>Name</th><th>Team</th><th>Base</th><th>Rune spd</th><th>Lead %</th><th>ATB boost %</th><th>Combat</th><th></th></tr></thead><tbody></tbody></table></div>
+      <div class="row" style="margin-top:12px"><button class="btn ghost" id="tAdd">+ Add unit</button></div>
+      <div class="order" id="tOrder"></div>
+      <h3>Find minimum speed</h3>
+      <div class="row">
+        <label>Unit <select id="tWho"></select></label>
+        <label>must move before <select id="tBefore"></select></label>
+        <button class="btn" id="tFind">Calculate</button>
+      </div>
+      <p id="tResult"></p>
+    </div>
+  </div>
+</section>
+
+<section id="rta">
+  <div class="card">
+    <h2>RTA match analyzer</h2>
+    <p class="muted">Paste or load your match log as CSV (<code>result,picks,opp_picks,bans,opp_bans,first</code>, lists separated by <code>|</code>) or a JSON array with the same keys.</p>
+    <textarea id="rText" placeholder="result,picks,opp_picks,bans,opp_bans,first
+win,Lushen|Verdehile|Tiana|Bastet|Seara,Chilling|Trinity|Leo|Riley|Fran,Seara,Verdehile,me
+loss,Lushen|Tiana|Bastet|Bella|Ahman,Chilling|Leo|Riley|Psamathe|Fran,Fran,Lushen,opp"></textarea>
+    <div class="row" style="margin-top:12px">
+      <input type="file" id="rFile" accept=".csv,.json,.txt">
+      <span style="flex:1"></span>
+      <button class="btn" id="rRun">Analyze</button>
+    </div>
+  </div>
+  <div id="rOut"></div>
+</section>
+</main>
+
+<script src="sw.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
