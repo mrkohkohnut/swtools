@@ -1,4 +1,4 @@
-/* global SW */
+/* global SW, MonsterUI */
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -7,7 +7,8 @@ const store = {
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* quota or private mode */ } },
 };
 
-const state = { units: [], runes: [], byId: {}, bestiary: store.get('bestiary') || {}, skills: store.get('skills') || {} };
+// Legacy bestiary/skills caches lack icon metadata. Never treat them as a catalog.
+const state = { units: [], runes: [], byId: {}, catalog: MonsterUI.catalogFromCache(store.get('monsterCatalogV1')) };
 
 // ---------- tabs ----------
 $('#nav').onclick = (e) => {
@@ -44,36 +45,22 @@ const options = (obj, any) => (any ? `<option value="">${any}</option>` : '') + 
 const pct = (n, d) => (d ? Math.round((n / d) * 100) + '%' : '–');
 
 // ---------- monsters ----------
-const monName = (u) => state.bestiary[u.unit_master_id]?.name || `#${u.unit_master_id}`;
-const monCell = (u) => {
-  const b = state.bestiary[u.unit_master_id];
-  return `<span class="mon">${b?.img ? `<img src="https://swarfarm.com/static/herders/images/monsters/${b.img}" alt="" loading="lazy">` : ''}${esc(monName(u))}</span>`;
-};
+const monName = (u) => MonsterUI.name(u, state.catalog);
+const monCell = (u) => MonsterUI.portrait(u, state.catalog);
+const monSkills = (u) => MonsterUI.skillInfo(u, state.catalog).html;
 
-// SWARFARM bestiary (names/icons) and skills (max levels); cached. Optional: app works with #ids if this fails.
-async function fetchAll(url, add) {
-  const out = {};
-  while (url) {
-    const j = await (await fetch(url)).json();
-    for (const x of j.results) add(out, x);
-    url = j.next;
-  }
-  return out;
-}
-async function loadBestiary() {
+// One same-origin public metadata snapshot per boot, never account-dependent API requests.
+async function loadCatalog() {
   try {
-    if (!Object.keys(state.bestiary).length) {
-      state.bestiary = await fetchAll('https://swarfarm.com/api/v2/monsters/?page_size=1000', (o, m) => (o[m.com2us_id] = { name: m.name, img: m.image_filename }));
-      store.set('bestiary', state.bestiary);
-      renderAll();
-    }
-    if (!Object.keys(state.skills).length) {
-      state.skills = await fetchAll('https://swarfarm.com/api/v2/skills/?page_size=1000', (o, s) => (o[s.com2us_id] = s.max_level));
-      store.set('skills', state.skills);
-      renderMonsters();
-    }
+    const response = await fetch('monster-catalog.json', { cache: 'no-cache' });
+    if (!response.ok) throw new Error('Monster catalog unavailable');
+    const catalog = MonsterUI.catalogFromCache(await response.json());
+    if (!catalog) throw new Error('Invalid monster catalog');
+    state.catalog = catalog;
+    store.set('monsterCatalogV1', catalog);
+    renderAll();
   } catch (e) {
-    console.warn('SWARFARM data unavailable', e);
+    console.warn('Monster metadata unavailable; using cached names or readable fallbacks.', e);
   }
 }
 
@@ -96,7 +83,6 @@ function load(data) {
   state.wizard = data.wizard_info?.wizard_name;
   state.rta = data.rtpvp_info;
   renderAll();
-  loadBestiary();
 }
 
 function readFile(f) {
@@ -185,9 +171,10 @@ const setChips = (ids) => ids.map((s) => `<span class="chip">${esc(SW.SETS[s] ||
 
 function renderCurrent() {
   const u = state.byId[$('#bMon').value];
+  renderPickerTrigger($('#bPicker'), u, 'Choose monster');
   if (!u) return ($('#bCurrent').innerHTML = '<div class="empty">Import an account first.</div>');
   const st = SW.unitStats(u, unitRunes(u));
-  $('#bCurrent').innerHTML = `<h3>Current build ${setChips(st.sets)}</h3>${statGrid(st)}`;
+  $('#bCurrent').innerHTML = `<div class="monster-summary">${monCell(u)}${monSkills(u)}</div><h3>Current build ${setChips(st.sets)}</h3>${statGrid(st)}`;
 }
 
 $('#bRun').onclick = () => {
@@ -231,6 +218,8 @@ function renderOutspeed() {
   const enemy = SW.combatSpeed(eb, er, el);
   const need = SW.minRuneSpeed(base, lead, enemy);
   const u = state.byId[$('#sMon').value];
+  renderPickerTrigger($('#sPicker'), u, 'Choose monster / manual speed');
+  $('#sSelected').innerHTML = u ? monSkills(u) : '';
   const have = u ? SW.unitStats(u, unitRunes(u)).SPD - u.spd : null;
   $('#sOut').innerHTML = `
     <div class="stat"><span>Enemy combat speed</span><b>${enemy}</b></div>
@@ -332,24 +321,18 @@ $('#mEl').innerHTML = options(ELEMENTS, 'All');
 
 // missing = skill-ups still needed; null when SWARFARM max levels are unknown
 function skillInfo(u) {
-  const sk = (u.skills || []).map(([id, lv]) => ({ lv, max: state.skills[id] }));
-  const known = sk.length && sk.every((s) => s.max);
-  return {
-    txt: sk.map((s) => (s.max ? `${s.lv}/${s.max}` : s.lv)).join(' · '),
-    used: sk.reduce((n, s) => n + s.lv - 1, 0),
-    missing: known ? sk.reduce((n, s) => n + Math.max(0, s.max - s.lv), 0) : null,
-  };
+  return MonsterUI.skillInfo(u, state.catalog);
 }
 
 function renderMonsters() {
   const us = state.units;
-  if (!us.length) return ($('#mStats').innerHTML = '<div class="empty">Import an account first.</div>');
+  if (!us.length) return ($('#collectionStats').innerHTML = '<div class="empty">Import an account first.</div>');
   const copies = {};
   for (const u of us) copies[u.unit_master_id] = (copies[u.unit_master_id] || 0) + 1;
   for (const u of us) u._sk = skillInfo(u);
   const known = us.some((u) => u._sk.missing !== null);
   const card = (n, v, sub = '') => `<div class="stat"><span>${n}</span><b>${v}</b>${sub ? `<span>${sub}</span>` : ''}</div>`;
-  $('#mStats').innerHTML = `<h2>Collection</h2><div class="stats">
+  $('#collectionStats').innerHTML = `<h2>Collection</h2><div class="stats">
     ${card('Monsters', us.length, `${Object.keys(copies).length} unique`)}
     ${card('6★', us.filter((u) => u.class % 10 === 6).length, `${us.filter((u) => u.class % 10 === 6 && u.unit_level === 40).length} at L40`)}
     ${known ? card('Fully skilled', us.filter((u) => u._sk.missing === 0).length) + card('Skill-ups needed', us.reduce((n, u) => n + (u._sk.missing || 0), 0), 'across all monsters') : card('Skill-ups used', us.reduce((n, u) => n + u._sk.used, 0), 'max levels load from SWARFARM')}
@@ -359,12 +342,12 @@ function renderMonsters() {
   const rows = us.filter((u) => (!q || monName(u).toLowerCase().includes(q)) && (!el || u.attribute === el)
     && (!star || (star === '6' ? u.class % 10 === 6 : u.class % 10 < 6))
     && (!sk || (sk === 'need' ? u._sk.missing > 0 : u._sk.missing === 0)));
-  table($('#mTable'), [
+  table($('#collectionTable'), [
     { k: 'name', label: 'Monster', v: monName, f: monCell },
     { k: 'attribute', label: 'Element', f: (u) => ELEMENTS[u.attribute] || '' },
     { k: 'class', label: '★', f: (u) => u.class % 10 },
     { k: 'unit_level', label: 'Lvl' },
-    { k: 'skills', label: 'Skills', v: (u) => u._sk.used, f: (u) => esc(u._sk.txt) },
+    { k: 'skills', label: 'Skills', v: (u) => u._sk.used, f: (u) => u._sk.html },
     { k: 'missing', label: 'Skill-ups left', v: (u) => u._sk.missing ?? -1, f: (u) => (u._sk.missing === null ? '<span class="muted">?</span>' : u._sk.missing ? `<span class="bad">${u._sk.missing}</span>` : '<span class="good">Max</span>') },
     { k: 'copies', label: 'Copies', v: (u) => copies[u.unit_master_id], f: (u) => copies[u.unit_master_id] },
     { k: 'spd', label: 'SPD', v: (u) => u._st.SPD, f: (u) => u._st.SPD },
@@ -380,7 +363,7 @@ function renderMonsters() {
 // One build per monster, shared by every team it's in, so a rune is never assigned twice.
 const plan = store.get('siegePlan') || { teams: [], builds: {} };
 const savePlan = () => store.set('siegePlan', plan);
-const unitLabel = (u) => `${monName(u)} ${u.class % 10}★ L${u.unit_level} #${u.unit_id}`;
+const unitLabel = (u) => state.choices?.[u.unit_id]?.label || monName(u);
 const buildOf = (id) => (plan.builds[id] ??= { sets: ['', ''], max: 'SPD', minSpd: '', outspeed: true, runes: null });
 const runeById = () => Object.fromEntries(state.runes.map((r) => [r.rune_id, r]));
 
@@ -399,7 +382,6 @@ function slotTarget(t, u) {
 }
 
 function renderPlan() {
-  $('#unitList').innerHTML = state.units.map((u) => `<option value="${esc(unitLabel(u))}">`).join('');
   const rb = runeById();
   if (!plan.teams.length) return ($('#pTeams').innerHTML = '<div class="card empty">No teams yet. Add one above.</div>');
   $('#pTeams').innerHTML = plan.teams.map((t, ti) => {
@@ -425,7 +407,7 @@ function renderPlan() {
         </div>`;
       }
       return `<div class="slot">
-        <label>Monster ${si + 1} <input list="unitList" data-t="${ti}" data-s="${si}" data-f="unit" value="${u ? esc(unitLabel(u)) : ''}" placeholder="Type to search"></label>
+        <div><span class="muted">Monster ${si + 1}</span><button type="button" class="unit-trigger" data-unit-picker="plan" data-team="${ti}" data-slot="${si}" aria-haspopup="dialog" aria-controls="unitPicker">${u ? `${monCell(u)}<span class="muted">${esc(state.choices?.[u.unit_id]?.details || '')}</span>` : id ? 'Monster not in imported account — choose replacement' : 'Choose monster'}</button>${u ? `<div class="monster-summary">${monSkills(u)}</div>` : ''}</div>
         <label>Set 1 ${sel('sets', 0, setOpts(b?.sets[0]))}</label>
         <label>Set 2 ${sel('sets', 1, setOpts(b?.sets[1]))}</label>
         <label>Maximize ${sel('max', null, options(STAT_OPTS).replace(`value="${b?.max}"`, `value="${b?.max}" selected`))}</label>
@@ -455,7 +437,6 @@ $('#pTeams').onchange = (e) => {
   const team = plan.teams[t];
   const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
   if (s === undefined) team[f] = v;
-  else if (f === 'unit') team.units[s] = (v.match(/#(\d+)$/) || [])[1] || '';
   else {
     const b = buildOf(team.units[s]);
     if (f === 'sets') b.sets[i] = v;
@@ -494,9 +475,84 @@ $('#pTeams').onclick = async (e) => {
   renderPlan();
 };
 
+// ---------- shared portrait picker ----------
+let pickerTarget = null;
+function renderPickerTrigger(button, unit, empty) {
+  button.innerHTML = unit ? `${monCell(unit)}<span class="muted">${esc(state.choices?.[unit.unit_id]?.details || '')}</span>` : empty;
+}
+function renderUnitPicker() {
+  if (!pickerTarget) return;
+  const entries = MonsterUI.pickerEntries(state.units, state.catalog, $('#unitPickerSearch').value);
+  const selected = pickerTarget.context === 'plan' ? plan.teams[pickerTarget.team]?.units[pickerTarget.slot]
+    : $(pickerTarget.context === 'builder' ? '#bMon' : '#sMon').value;
+  $('#unitPickerGrid').innerHTML = entries.map(entry => entry.html.replace('<button ', `<button aria-pressed="${entry.id === String(selected)}" `)).join('')
+    || '<div class="empty">No monsters found. Import an account or try another search.</div>';
+  $('#unitPickerCount').textContent = `${entries.length} monster${entries.length === 1 ? '' : 's'}`;
+}
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-unit-picker]');
+  if (!button) return;
+  pickerTarget = { context: button.dataset.unitPicker, team: button.dataset.team, slot: button.dataset.slot, trigger: button };
+  $('#unitPickerSearch').value = '';
+  $('#unitPickerClear').hidden = pickerTarget.context === 'builder';
+  renderUnitPicker();
+  $('#unitPicker').showModal();
+  $('#unitPickerSearch').focus();
+});
+function choosePickerUnit(id) {
+  if (!pickerTarget || (id && !state.byId[id])) return;
+  if (pickerTarget.context === 'plan') {
+    const team = plan.teams[pickerTarget.team];
+    if (!team) return;
+    team.units[pickerTarget.slot] = id;
+    savePlan();
+    renderPlan();
+  } else {
+    const select = $(pickerTarget.context === 'builder' ? '#bMon' : '#sMon');
+    select.value = id;
+    select.onchange();
+  }
+  $('#unitPicker').close();
+}
+$('#unitPickerGrid').onclick = event => {
+  const choice = event.target.closest('[data-unit-choice]');
+  if (choice) choosePickerUnit(choice.dataset.unitChoice);
+};
+$('#unitPickerClear').onclick = () => choosePickerUnit('');
+$('#unitPickerClose').onclick = () => $('#unitPicker').close();
+$('#unitPickerSearch').oninput = renderUnitPicker;
+$('#unitPickerSearch').onkeydown = event => {
+  if (event.key !== 'ArrowDown' && event.key !== 'Enter') return;
+  const first = $('#unitPickerGrid').querySelector('[data-unit-choice]');
+  if (!first) return;
+  event.preventDefault();
+  if (event.key === 'Enter') first.click();
+  else first.focus();
+};
+$('#unitPickerGrid').onkeydown = event => {
+  if (!['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+  const buttons = [...$('#unitPickerGrid').querySelectorAll('[data-unit-choice]')];
+  if (!buttons.length) return;
+  event.preventDefault();
+  const current = buttons.indexOf(document.activeElement);
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+    : Math.max(0, Math.min(buttons.length - 1, current + (['ArrowDown', 'ArrowRight'].includes(event.key) ? 1 : -1)));
+  buttons[next].focus();
+};
+$('#unitPicker').addEventListener('cancel', event => { event.preventDefault(); $('#unitPicker').close(); });
+$('#unitPicker').addEventListener('close', () => {
+  if (!pickerTarget) return;
+  const { context, team, slot, trigger } = pickerTarget;
+  pickerTarget = null;
+  const restored = context === 'plan' ? $(`[data-unit-picker="plan"][data-team="${team}"][data-slot="${slot}"]`)
+    : $(context === 'builder' ? '#bPicker' : '#sPicker');
+  (restored || (trigger.isConnected && trigger))?.focus();
+});
+
 // ---------- render ----------
 function renderAll() {
-  const monOpts = state.units.map((u) => `<option value="${u.unit_id}">${esc(monName(u))} · ${u.class}★ L${u.unit_level}</option>`).join('');
+  state.choices = Object.fromEntries(MonsterUI.pickerEntries(state.units, state.catalog).map(entry => [entry.id, entry]));
+  const monOpts = state.units.map((u) => `<option value="${esc(u.unit_id)}">${esc(unitLabel(u))}</option>`).join('');
   const keep = [$('#bMon').value, $('#sMon').value];
   $('#bMon').innerHTML = monOpts;
   $('#sMon').innerHTML = '<option value="">— manual —</option>' + monOpts;
@@ -508,6 +564,7 @@ function renderAll() {
   renderRunes();
   renderCurrent();
   renderOutspeed();
+  renderUnitPicker();
   if (typeof renderRtaMeta === 'function') renderRtaMeta();
 }
 
@@ -519,3 +576,4 @@ else {
 }
 renderTune();
 if (store.get('rta')) $('#rText').value = store.get('rta');
+loadCatalog();

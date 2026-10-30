@@ -7,7 +7,7 @@ Open `index.html`, or host the folder anywhere (GitHub Pages works).
 | Tab | What it does |
 |---|---|
 | **Import** | Load a SWEX JSON export. Shows account summary (rune efficiency, speed subs). |
-| **Monsters** | Collection summary (count, unique, 6★/L40, per element) and every monster with skill levels, skill-ups left, copies, speed, sets and rune efficiency. |
+| **Monsters** | Named monster portraits and skill icons with level progress, plus collection totals, skill-ups left, copies, speed, sets and rune efficiency. |
 | **Runes** | Every rune with efficiency and max efficiency, filterable and sortable. |
 | **Builder** | Current stats for a monster, plus an optimizer: pick sets, slot 2/4/6 mains and minimum stats, then maximize one stat. |
 | **Siege Planner** | Saved teams vs siege defenses. Each monster gets a target build (sets, stat to maximize, min SPD or auto "outspeed the enemy"). Runes are assigned across all planned monsters with no rune used twice, and each team lists the runes to move. Saved in your browser. |
@@ -32,9 +32,15 @@ win,Lushen|Verdehile|Tiana|Bastet|Seara,Chilling|Trinity|Leo|Riley|Fran,Seara,Ve
 
 `node test.js` runs the logic checks in `sw.js`.
 
-`node --test rta-meta.test.js` checks the public snapshot helpers. A collector has not been enabled; a permitted data source must be configured first.
+`node --test *.test.js` checks the public snapshot helpers, artwork catalog and monster presentation/selection. An RTA collector has not been enabled; a permitted data source must be configured first.
 
-Monster names and icons are fetched from the SWARFARM API and cached. If that fetch fails, monsters are shown by ID.
+## Monster and skill artwork
+
+`monster-catalog.json` is a compact, public SWARFARM metadata snapshot, keyed internally by the game's monster and skill identifiers. It contains names, portrait/skill image filenames, elements, skill descriptions and maximum levels—not any player's account data. The app loads this same-origin file rather than making dozens of API calls whenever an account is imported. The snapshot records its generation time and SWARFARM source.
+
+Monster names and portraits identify units in the interface; raw game identifiers remain internal. Skill icons include readable skill names and level progress. Duplicate copies remain separately selectable without exposing their numeric account IDs. Missing metadata uses an honest readable fallback instead of inventing a monster name. Actual combat statistics, levels and skill progress remain numeric where useful.
+
+Portrait and skill artwork is loaded from SWARFARM's public image service. If remote artwork is unavailable, names and fallback labels remain usable. Refresh the public catalog when new monsters or skill changes are released; the catalog is a snapshot, not a live balance feed. SWARFARM supplies the metadata; Summoners War artwork belongs to its respective rights holders.
 
 ## Public RTA collection
 
@@ -57,4 +63,4 @@ SWRT's unauthenticated replay-search interface was technically accessible during
 
 Accounts are restored only from this browser's local storage or an explicitly imported SWEX file. The app no longer tries to fetch the bundled `data/account.json`. Neither account imports nor the personal RTA log are sent to the collector.
 
-Publish an explicit allowlist: `index.html`, `app.js`, `sw.js`, `rta-meta.js`, `rta-meta-ui.js`, and the aggregate `rta-meta.json`. Never serve the repository root, `.git`, the collector's private state, raw replay payloads, or `data/account.json`. Public statistics should contain monster IDs, names, elements and aggregate counts—not player names, IDs, portraits, account exports, or raw battle records. The upstream repository's bundled export is unaffected by this deployment boundary.
+Publish an explicit allowlist: `index.html`, `app.js`, `sw.js`, `monster-ui.js`, `monster-catalog.json`, `rta-meta.js`, `rta-meta-ui.js`, and the aggregate `rta-meta.json` if a permitted dataset is configured. Never serve the repository root, `.git`, the collector's private state, raw replay payloads, or `data/account.json`. Public statistics should contain monster IDs, names, elements and aggregate counts—not player names, IDs, portraits, account exports, or raw battle records. The upstream repository's bundled export is unaffected by this deployment boundary.

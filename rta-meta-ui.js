@@ -1,4 +1,4 @@
-/* global RtaMeta, state, table, esc */
+/* global RtaMeta, state, table, esc, monCell */
 // Public statistics are separate from account imports and personal RTA logs.
 const publicRtaState = { data: null, loading: null, error: '' };
 const metaEl = id => document.getElementById(id);
@@ -36,7 +36,7 @@ function renderRtaMeta() {
     <div class="stat"><span>First-pick side win rate</span><b>${metaPercent(data.firstPickGames ? 100 * data.firstPickWins / data.firstPickGames : null)}</b><span>${data.firstPickGames} decided games</span></div>
   </div><p class="muted">Source reports ${data.source.reportedTotal.toLocaleString()} available records; only the ${data.matches.toLocaleString()} collected matches above are used here. ${data.skipped} invalid or unknown-result records skipped in the latest collection. Historical season completeness is not guaranteed.</p>`;
   table(metaEl('mTable'), [
-    { k: 'name', label: 'Monster', f: r => `<b>${esc(r.name)}</b> <span class="muted">${esc(r.element)} · #${r.id}</span>` },
+    { k: 'name', label: 'Monster', f: r => `${monCell({ unit_master_id: r.id, name: r.name, element: r.element })} <span class="muted">${esc(r.element)}</span>` },
     { k: 'picks', label: 'Drafts' },
     { k: 'pickRate', label: 'Pick rate', f: r => metaPercent(r.pickRate) },
     { k: 'bans', label: 'Bans' },
