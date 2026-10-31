@@ -16,7 +16,14 @@ $('#nav').onclick = (e) => {
   if (!t) return;
   $$('#nav button').forEach((b) => b.classList.toggle('on', b === e.target));
   $$('main section').forEach((s) => s.classList.toggle('on', s.id === t));
+  e.target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 };
+
+// SWARFARM portraits/skill icons: swap a failed load for a neutral tile instead of a broken-image icon.
+const IMG_FALLBACK = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#8b93a1" fill-opacity=".18"/></svg>');
+document.addEventListener('error', (e) => {
+  if (e.target.tagName === 'IMG' && e.target.src !== IMG_FALLBACK) e.target.src = IMG_FALLBACK;
+}, true);
 
 // ---------- generic sortable table ----------
 // cols: [{ k, label, v?: row => sortValue, f?: row => html }]
